@@ -3,21 +3,21 @@ function [f_continuous, f_discrete] = dynamics(Ts)
     % General parameters
     g = 9.81;
     k_t = 0.042;
-    k_m = 0.042;
+    k_m = k_t;
     R_m = 8.4;
     
     % Rotary arm parameters
     m_r = 0.095;
     r = 0.085;
     b_r = 10^(-3);
-    J_r = m_r*r^2/3;
+    J_r = m_r*r^2/3; % around the pivot point
     
     % Pendulum arm parameters
     m_p = 0.024;
     L_p = 0.129;
     l = L_p/2;
     b_p = 5*10^(-5);
-    J_p = m_p*L_p^2/3;
+    J_p = m_p*L_p^2/3; % around the pivot point
     
     % States q :
     %   q(1) => Angle of rotary arm

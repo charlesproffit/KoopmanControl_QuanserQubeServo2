@@ -14,14 +14,14 @@ function [LIN_CT, LIN_DT] = dynamics_linearized(q_eq, u_eq, Ts)
     m_r = 0.095;
     r = 0.085;
     b_r = 10^(-3);
-    J_r = 2.29*10^(-4);
+    J_r = m_r*r^2/3;
     
     % Pendulum arm parameters
     m_p = 0.024;
     L_p = 0.129;
     l = 0.0645;
     b_p = 5*10^(-5);
-    J_p = 1.33*10^-4;
+    J_p = m_p*L_p^2/3;
     
     % States q :
     %   q(1) => Angle of rotary arm
@@ -58,5 +58,4 @@ function [LIN_CT, LIN_DT] = dynamics_linearized(q_eq, u_eq, Ts)
     sys_dt = c2d(sys_ct, Ts, 'zoh');
     LIN_DT.A = sys_dt.A;
     LIN_DT.B = sys_dt.B;
-
 end
