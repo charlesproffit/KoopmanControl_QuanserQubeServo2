@@ -1,8 +1,12 @@
-function [data, n] = structure_data(tdms_data_path, n)
-    data_tdms = tdmsread(tdms_data_path);
+function [data, n] = structure_data(data_path, n, steps_length)
+    if endsWith(data_path, ".mat")
+        load(data_path, 'data');
+        data_tdms = data;
+        clear data;
+    else
+        data_tdms = tdmsread(data_path);
+    end
     n.trajs = numel(data_tdms);
-    steps_plus1 = height(data_tdms{1});
-    steps = steps_plus1 - 1;
 
     % First pass: load all valid trajectories
     valid_trajs = {};
@@ -16,8 +20,17 @@ function [data, n] = structure_data(tdms_data_path, n)
         u  = T{:,"u"};
 
         q = [q1 q2 q3 q4]';
-        u = u';
-        u = u(:,1:end-1);
+        q = q(:, 3:end);        % remove first zero row due to reinitializing the arrays
+        u = u';   
+        u = u(:, 2:end-2);      % remove first zero row and last input we dont need it
+        
+        if ~strcmp(steps_length, 'all')
+            % Truncate to desired length
+            q = q(:, 1:steps_length+1);
+            u = u(:, 1:steps_length);
+        end
+
+        n.steps = size(u,2);
 
         % we discard trajectory if q2 leaves [-pi, pi]
         if any(abs(q(2,:)) > pi)
@@ -32,21 +45,23 @@ function [data, n] = structure_data(tdms_data_path, n)
     n.trajs_training = fix(n.train_test_ratio * n.trajs);
     n.trajs_testing  = n.trajs - n.trajs_training;
 
-    data.training.q = zeros(n.states, steps_plus1, n.trajs_training);
-    data.training.u = zeros(n.inputs, steps,        n.trajs_training);
-    data.testing.q  = zeros(n.states, steps_plus1,  n.trajs_testing);
-    data.testing.u  = zeros(n.inputs, steps,         n.trajs_testing);
+    data.training.q = zeros(n.states, n.steps+1, n.trajs_training);
+    data.training.u = zeros(n.inputs, n.steps,        n.trajs_training);
+    data.testing.q  = zeros(n.states, n.steps+1,  n.trajs_testing);
+    data.testing.u  = zeros(n.inputs, n.steps,         n.trajs_testing);
+
+    % ar = 1:n.trajs;
+    ar = randperm(n.trajs);
 
     for i = 1:n.trajs
         if i <= n.trajs_training
-            data.training.q(:,:,i) = valid_trajs{i}.q;
-            data.training.u(:,:,i) = valid_trajs{i}.u;
+            data.training.q(:,:,i) = valid_trajs{ar(i)}.q;
+            data.training.u(:,:,i) = valid_trajs{ar(i)}.u;
         else
-            data.testing.q(:,:,i-n.trajs_training) = valid_trajs{i}.q;
-            data.testing.u(:,:,i-n.trajs_testing)  = valid_trajs{i}.u;
+            data.testing.q(:,:,i-n.trajs_training) = valid_trajs{ar(i)}.q;
+            data.testing.u(:,:,i-n.trajs_training)  = valid_trajs{ar(i)}.u;
         end
     end
 
-    n.steps = steps;
     fprintf('Valid trajectories kept: %d / %d\n', n.trajs, numel(data_tdms));
 end

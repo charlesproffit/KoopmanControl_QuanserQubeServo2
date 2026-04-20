@@ -1,4 +1,4 @@
-function [EDMD, data_lifted] = compute_edmd(data, f, n, mode)
+function [EDMD, data_lifted] = compute_edmd(data, f, n, mode, method)
     if strcmp(mode,'EDMD')||strcmp(mode,'BILINEAR')
         n_used = n.lifted_states;
     else
@@ -22,62 +22,140 @@ function [EDMD, data_lifted] = compute_edmd(data, f, n, mode)
     lifted_Q = reshape(lifted_q,n_used,[]);
     lifted_Q_plus = reshape(lifted_q_plus,n_used,[]);
     U = reshape(data_lifted.u,n.inputs,[]);
-    % Metrics to identify if the state space is well covered
-    EDMD.condition_number = cond(lifted_Q);
-    EDMD.svds = svd(lifted_Q);
 
     % Step 3 : Compute A, B, C
     if strcmp(mode,'BILINEAR')
         PhiU = lifted_Q.*repmat(U,n.lifted_states,1);
-        ABN_combined = lifted_Q_plus * pinv([lifted_Q;U;PhiU]);
+        stacked = [lifted_Q;U;PhiU];
+        if strcmp(method,'LS')
+            ABN_combined = lifted_Q_plus * pinv(stacked);
+        else 
+            if strcmp(method,'RIDGE')
+                lambda = select_lambda(stacked, lifted_Q_plus, n, mode);
+                EDMD.lambda = lambda;
+                ABN_combined = lifted_Q_plus * stacked' * (stacked*stacked' + lambda*eye(size(stacked,1)))^(-1);
+            else
+                disp('Method not implemented');
+            end
+        end
         A = ABN_combined(:,1:n_used);
         B = ABN_combined(:,n_used+1:n_used+n.inputs);
         N = ABN_combined(:,n_used+n.inputs+1:end);
         C = Q * pinv(lifted_Q);
 
+        % Metrics to identify if the observables are well chosen
+        EDMD.condition_number = cond(stacked);
+        EDMD.svds = svd(stacked);
+
         % Error computation
         difference = lifted_Q_plus - A*lifted_Q - B*U - N*PhiU;
         state_diff = C * difference;  % Project residuals to original state space [n.states*(n.steps*n.trajs_training)]
+        difference = reshape(difference, n_used, n.steps, n.trajs_training); % [n.states*n.steps*n.trajs_training]
         state_diff = reshape(state_diff, n.states, n.steps, n.trajs_training); % [n.states*n.steps*n.trajs_training]
         % For each trajectory, we compute the Frobenius norm of its error matrix
         traj_fro = zeros(n.trajs_training, 1);
+        traj_fro_lifted = zeros(n.trajs_training, 1);
         for i = 1:n.trajs_training
             traj_fro(i) = norm(state_diff(:,:,i), 'fro');
+            traj_fro_lifted(i) = norm(difference(:,:,i), 'fro');
         end
-        training_error_fro = mean(traj_fro); % Then we average
-        % training_error_2norm = norm(difference, 2);
-        % training_error_fro = norm(difference, 'fro');
+        training_error_fro = mean(traj_fro);
+        training_error_fro_lifted = mean(traj_fro_lifted);
 
         EDMD.A = A;
         EDMD.B = B;
         EDMD.C = C;
         EDMD.N = N;
-        % EDMD.training_error_2norm = training_error_2norm;
         EDMD.training_error_fro = training_error_fro;
+        EDMD.training_error_fro_lifted = training_error_fro_lifted;
     else
-        AB_combined = lifted_Q_plus * pinv([lifted_Q;U]);
+        stacked = [lifted_Q;U];
+        if strcmp(method,'LS')
+            AB_combined = lifted_Q_plus * pinv(stacked);
+        else 
+            if strcmp(method,'RIDGE')
+                lambda = select_lambda(stacked, lifted_Q_plus, n, mode);
+                EDMD.lambda = lambda;
+                AB_combined = lifted_Q_plus *  stacked' * (stacked*stacked' + lambda*eye(size(stacked,1)))^(-1);
+            else
+                disp('Method not implemented');
+            end
+        end
         A = AB_combined(:,1:n_used);
         B = AB_combined(:,n_used+1:end);
         C = Q * pinv(lifted_Q);
 
+        % Metrics to identify if the observables are well chosen
+        EDMD.condition_number = cond(stacked);
+        EDMD.svds = svd(stacked);        
+
         % Error computation
         difference = lifted_Q_plus - A*lifted_Q - B*U;
         state_diff = C * difference;  % Project residuals to original state space [n.states*(n.steps*n.trajs_training)]
+        difference = reshape(difference, n_used, n.steps, n.trajs_training); % [n.states*n.steps*n.trajs_training]
         state_diff = reshape(state_diff, n.states, n.steps, n.trajs_training); % [n.states*n.steps*n.trajs_training]
         % For each trajectory, we compute the Frobenius norm of its error matrix
         traj_fro = zeros(n.trajs_training, 1);
+        traj_fro_lifted = zeros(n.trajs_training, 1);
         for i = 1:n.trajs_training
             traj_fro(i) = norm(state_diff(:,:,i), 'fro');
+            traj_fro_lifted(i) = norm(difference(:,:,i), 'fro');
         end
-        training_error_fro = mean(traj_fro); % Then we average
-        % training_error_2norm = norm(difference, 2); % vecnorm
-        % training_error_fro = norm(difference, 'fro');
+        training_error_fro = mean(traj_fro);
+        training_error_fro_lifted = mean(traj_fro_lifted);
     
         EDMD.A = A;
         EDMD.B = B;
         EDMD.C = C;
-        % EDMD.training_error_2norm = training_error_2norm;
         EDMD.training_error_fro = training_error_fro;
+        EDMD.training_error_fro_lifted = training_error_fro_lifted;
     end
+
+end
+
+function lambda = select_lambda(stacked, lifted_Q_plus, n, mode)
+
+    lambdas = [0, logspace(-4, 4, 50)];
+    n_lambdas = length(lambdas);
+
+    traj_fold_assignments = mod(0:n.trajs_training-1, n.cross_val_groups) + 1;
+    fold_assignments = repelem(traj_fold_assignments, n.steps);
+
+    val_errors = zeros(n.cross_val_groups, n_lambdas);
+
+    for fold = 1:n.cross_val_groups
+        % Split into train / validation
+        val_mask   = (fold_assignments == fold);
+        train_mask = ~val_mask;
+
+        stacked_train        = stacked(:, train_mask);
+        stacked_val          = stacked(:, val_mask);
+        lifted_Q_plus_train  = lifted_Q_plus(:, train_mask);
+        lifted_Q_plus_val    = lifted_Q_plus(:, val_mask);
+
+        for k = 1:n_lambdas
+            if lambdas(k) == 0
+                AB = lifted_Q_plus_train * pinv(stacked_train);
+            else
+                AB = lifted_Q_plus_train * stacked_train' * (stacked_train * stacked_train' + lambdas(k) * eye(size(stacked_train, 1)))^(-1);
+            end
+            val_errors(fold, k) = norm(lifted_Q_plus_val - AB * stacked_val, 'fro');
+        end
+    end
+
+    % Average validation error across folds, pick best lambda
+    mean_val_errors = mean(val_errors, 1);
+    [~, best_k] = min(mean_val_errors);
+    lambda = lambdas(best_k);
+    fprintf('[%s] Best lambda = %.6f \n', mode, lambda);
+
+    % Plot
+    % figure;
+    % semilogx(lambdas(2:end), mean_val_errors(2:end), 'o-', 'DisplayName', 'Mean CV error'); hold on;
+    % if best_k > 1  % lambda=0 doesn't show on log axis
+    %     xline(lambda, 'r--', sprintf('\\lambda = %.4f', lambda));
+    % end
+    % xlabel('\lambda'); ylabel('Validation error (fro)');
+    % title(sprintf('%s: %d-fold crossvalidation for \\lambda selection', mode, n.cross_val_groups));
 
 end

@@ -45,7 +45,7 @@ function [data,n] = collect_data(f_discrete, umax, n, mode, K_LQR)
             end
         end
         data.training.q = q;
-        data.training.u = u;
+        data.training.u = noise; % ATTENTION ON A MIS LE CONTROLEUR, MTN ON L'OUBLIE !! => DONC DE noise A q !!
         disp('Training data collected');
 
         % 2. TESTING DATA
@@ -85,7 +85,7 @@ function [data,n] = collect_data(f_discrete, umax, n, mode, K_LQR)
             end
         end
         data.testing.q = q;
-        data.testing.u = u;
+        data.testing.u = noise;
         disp('Testing data collected');
 
     elseif strcmp(mode,'FRF')
