@@ -1,4 +1,4 @@
-function [data,n] = collect_data(f_discrete, umax, n, mode, K_LQR)
+function [data,n] = collect_data(f_discrete, umax, n, mode)
     if strcmp(mode, 'EDMD')
         % 1. TRAINING DATA
         n.trajs_training = fix(n.train_test_ratio*n.trajs);
@@ -25,8 +25,7 @@ function [data,n] = collect_data(f_discrete, umax, n, mode, K_LQR)
             
             j = 1;
             while j <= n.steps
-                u(:,j,i) = noise(:,j,i) - K_LQR*q(:,j,i);
-                q(:,j+1,i) = f_discrete(q(:,j,i), u(:,j,i));
+                q(:,j+1,i) = f_discrete(q(:,j,i), noise(:,j,i));
                 if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
                     % 1. Re randomize initial states
                     q(1,1,i) = 0;%pi/2*(2*rand() - 1); % [-pi/2;pi/2]
@@ -65,8 +64,7 @@ function [data,n] = collect_data(f_discrete, umax, n, mode, K_LQR)
              
             j = 1;
             while j <= n.steps
-                u(:,j,i) = noise(:,j,i) - K_LQR*q(:,j,i);
-                q(:,j+1,i) = f_discrete(q(:,j,i), u(:,j,i));
+                q(:,j+1,i) = f_discrete(q(:,j,i), noise(:,j,i));
                 if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
                     % 1. Re randomize initial states
                     q(1,1,i) = 0;%pi/2*(2*rand() - 1); % [-pi/2;pi/2]

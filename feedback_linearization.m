@@ -1,4 +1,4 @@
-function [M_DDFL] = feedback_linearization(f_lifting, M_BILINEAR, n, tol)
+function [M_DDFL_CT, M_DDFL_DT] = feedback_linearization(f_lifting, M_BILINEAR_CT, n, tol, Ts)
     % 1. Augment the system to have the system phi+ = A*phi+B*phi*u
     phi = @(q)[
         1;
@@ -6,13 +6,13 @@ function [M_DDFL] = feedback_linearization(f_lifting, M_BILINEAR, n, tol)
     ];
 
     A = [
-        [0, zeros(1,size(M_BILINEAR.A,1))];
-        [zeros(size(M_BILINEAR.A,1),1), M_BILINEAR.A];
+        [0, zeros(1,size(M_BILINEAR_CT.A,1))];
+        [zeros(size(M_BILINEAR_CT.A,1),1), M_BILINEAR_CT.A];
     ];
 
     B = [
-        [0, zeros(1,size(M_BILINEAR.N,1))];
-        [M_BILINEAR.B, M_BILINEAR.N];
+        [0, zeros(1,size(M_BILINEAR_CT.N,1))];
+        [M_BILINEAR_CT.B, M_BILINEAR_CT.N];
     ];
 
 
@@ -30,10 +30,14 @@ function [M_DDFL] = feedback_linearization(f_lifting, M_BILINEAR, n, tol)
     end
 
     % 3. Compute T, gamma and etta
-    M = v' ;
-    for i=1:n.states-1
-        M = [M; v'*A^(i)];
-    end
+    % M = v' ;
+    % for i=1:n.states-1
+    %     M = [M; v'*A^(i)];
+    % end
+    % T = @(q) M*phi(q);
+    M = zeros(4, n.lifted_states+1);
+    M(1,2) = 1; % To extract q1
+    M(2,4) = 1; % To extract q3
     T = @(q) M*phi(q);
     gamma = @(q) v'*A^(n.states-1)*B*phi(q);
     etta = @(q) -v'*A^(n.states)*phi(q);
@@ -49,11 +53,21 @@ function [M_DDFL] = feedback_linearization(f_lifting, M_BILINEAR, n, tol)
         1;
     ];
 
-    M_DDFL.A = A_c;
-    M_DDFL.B = B_c;
-    M_DDFL.T = @(q) T(q);
-    M_DDFL.gamma = @(q) gamma(q);
-    M_DDFL.etta = @(q) etta(q);
-    % M_DDFL.u = @(q,v) (v + etta(q))/gamma(q);
+    M_DDFL_CT.A = A_c;
+    M_DDFL_CT.B = B_c;
+    M_DDFL_CT.T = @(q) T(q);
+    M_DDFL_CT.gamma = @(q) gamma(q);
+    M_DDFL_CT.etta = @(q) etta(q);
+    % M_DDFL_CT.u = @(q,v) (v + etta(q))/gamma(q);
+
+    % Discretization
+    sys_ct = ss(M_DDFL_CT.A, M_DDFL_CT.B, eye(size(M_DDFL_CT.A,1)), 0);
+    sys_dt = c2d(sys_ct, Ts, 'zoh');
+    M_DDFL_DT.A = sys_dt.A;
+    M_DDFL_DT.B = sys_dt.B;
+    M_DDFL_DT.T = @(q) T(q);
+    M_DDFL_DT.gamma = @(q) gamma(q);
+    M_DDFL_DT.etta = @(q) etta(q);
+    % M_DDFL_DT.u = @(q,v) (v + etta(q))/gamma(q);
 
 end

@@ -1,4 +1,4 @@
-function [trajs] = simul_control(f_discrete, umax, n, K_LQR, M_DDFL, K, z_ref)
+function [trajs] = simul_control(f_discrete, umax, n, M_DDFL, K, z_ref)
     % 1. TRAINING DATA
     n.trajs_control = 100;
     angle_region = 2*pi/n.regions;
@@ -27,7 +27,7 @@ function [trajs] = simul_control(f_discrete, umax, n, K_LQR, M_DDFL, K, z_ref)
             v = - K*err;
             ett = M_DDFL.etta(q(:,j,i));
             gamm = M_DDFL.gamma(q(:,j,i));
-            u(:,j,i) = (v + ett)/gamm - K_LQR*q(:,j,i);
+            u(:,j,i) = (v + ett)/gamm;
             q(:,j+1,i) = f_discrete(q(:,j,i), u(:,j,i));
             j=j+1;
         end

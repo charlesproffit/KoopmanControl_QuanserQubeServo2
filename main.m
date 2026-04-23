@@ -26,6 +26,7 @@ end
 [f_continuous, f_discrete] = dynamics(Ts);
 [SS_LINEAR_CT, SS_LINEAR_DT] = dynamics_linearized([0;0;0;0],0,Ts);
 [K_LQR,~,~] = dlqr(SS_LINEAR_DT.A, SS_LINEAR_DT.B, diag([0.41, 0, 0, 0]), 0.016);
+f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
 
 % Koopman functions
 f_lifting = @(q)[
@@ -39,12 +40,8 @@ f_lifting = @(q)[
     cos(q(2))*sin(q(2))*q(3)*q(4);
     sin(q(2))*q(4)^2;
     cos(q(2))*sin(q(2))*q(3)^2;
-    % sin(q(2))*q(3);
-    % cos(q(2))*q(3);
-    % cos(q(2))*q(4)
 ];
 f_linear = @(q)[q(1); q(2); q(3); q(4)];
-% f_lifting = f_linear;
 n.lifted_states = size(f_lifting(zeros(n.states,1)),1);
 
 %--------------DATA COLLECTION-----------------------%
@@ -53,47 +50,33 @@ n.lifted_states = size(f_lifting(zeros(n.states,1)),1);
 if mode == "REAL"
     [data_EDMD,n] = structure_data('data.mat', n, 'all');
 else
-    [data_EDMD,n] = collect_data(f_discrete, umax, n, 'EDMD', K_LQR);
+    [data_EDMD,n] = collect_data(f_discrete_with_LQR, umax, n, 'EDMD');
 end
 
 %--------------STATE-SPACE IDENTIFICATION WITH EDMD-----------------------%
 
 % Bilinear EDMD lifted model
-[M_BILINEAR, ~] = compute_edmd(data_EDMD, f_lifting, n, 'BILINEAR', 'RIDGE');
+[M_BILINEAR_CT, M_BILINEAR_DT, ~] = compute_edmd(data_EDMD, f_lifting, n, Ts, 'BILINEAR', 'RIDGE');
 
 % Linear EDMD lifted model
-[M_EDMD, ~] = compute_edmd(data_EDMD, f_lifting, n, 'EDMD', 'RIDGE');
+[~, M_EDMD_DT, ~] = compute_edmd(data_EDMD, f_lifting, n, Ts, 'EDMD', 'RIDGE');
 
 % Linear EDMD non-lifted model
-[M_LINEAR, ~] = compute_edmd(data_EDMD, f_linear, n, 'LINEAR', 'RIDGE');
+[~, M_LINEAR_DT, ~] = compute_edmd(data_EDMD, f_linear, n, Ts, 'LINEAR', 'RIDGE');
 
 % Comparison of the 4 models
-comparison = compare_models(data_EDMD, f_lifting, M_BILINEAR, M_EDMD, M_LINEAR, n);
+comparison = compare_models(data_EDMD, f_lifting, M_BILINEAR_DT, M_EDMD_DT, M_LINEAR_DT, n);
 
-% plots(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, M_BILINEAR);
+% plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR_DT, M_EDMD_DT, M_BILINEAR_DT);
 
 
 %--------------DATA-DRIVEN FEEDBACK LINEARIZATION AND CONTROL-----------------------%
-M_DDFL = feedback_linearization(f_lifting, M_BILINEAR, n, 1);
+[M_DDFL_CT, M_DDFL_DT] = feedback_linearization(f_lifting, M_BILINEAR_CT, n, 1, Ts);
 
-K = dlqr(M_DDFL.A, M_DDFL.B, eye(size(M_DDFL.A, 1)), 1);
+K = lqr(M_DDFL_CT.A, M_DDFL_CT.B, 0.01*eye(size(M_DDFL_CT.A, 1)), 0.016);
 
 % Reference
 q_ref = [0;0;0;0];
-z_ref = M_DDFL.T(q_ref);
+z_ref = M_DDFL_DT.T(q_ref);
 
-trajs = simul_control(f_discrete, umax, n, K_LQR, M_DDFL, K, z_ref);
-
-%---------FREQUENCY RESPONSE IDENTIFICATION WITH FOURIER ANALYSIS---------%
-
-% % Data collected with PRBS signal
-% data_FRF = collect_data(f_discrete, umax, n, 'FRF');
-% 
-% % FRF model
-% [M_FRF, data_FRF_lifted] = compute_frf(data_FRF, f_lifting, Ts, n, 'FRF');
-% 
-% 
-% opts = bodeoptions('cstprefs');
-% opts.PhaseWrapping='on';
-% bode(M_FRF, '.', ss(SS_LINEAR_CT.A, SS_LINEAR_CT.B, [0,1,0,0], []), 'r.', opts)
-% compare(M_FRF,ss(SS_LINEAR_CT.A, SS_LINEAR_CT.B, [0,1,0,0], []))
+trajs = simul_control(f_discrete_with_LQR, umax, n, M_DDFL_DT, K, z_ref);
