@@ -5,7 +5,7 @@ close all;
 
 rng(22);
 
-% System Parameters
+%% System Parameters
 Ts = 0.008;         % Time step
 n.states = 4;       % Number of states
 n.inputs = 1;       % Number of inputs   
@@ -14,7 +14,7 @@ n.regions = 16;     % Number of subdivisions of a full circle for the initial co
 
 n.train_test_ratio = 0.8;
 n.cross_val_groups = 5;
-umax = 6;          % Max possible input
+umax = 15;          % Max possible input
 mode = "REAL";
 
 if mode == "SIM"
@@ -34,17 +34,20 @@ f_lifting = @(q)[
     q(2);
     q(3);
     q(4);
-    sin(q(2));
-    cos(q(2));
-    sin(q(2))^2;
-    cos(q(2))*sin(q(2))*q(3)*q(4);
-    sin(q(2))*q(4)^2;
-    cos(q(2))*sin(q(2))*q(3)^2;
+    sin(q(2)); %OK
+    cos(q(2)); %OK
+    sin(q(2))^2; %OK
+    cos(q(2))*sin(q(2))*q(3)*q(4); %OK
+    sin(q(2))*q(4)^2; %OK
+    cos(q(2))*sin(q(2))*q(3)^2; %OK
+    cos(q(2))^2;
+    sin(q(2))*cos(q(2));
+    cos(q(2))*q(4);
 ];
 f_linear = @(q)[q(1); q(2); q(3); q(4)];
 n.lifted_states = size(f_lifting(zeros(n.states,1)),1);
 
-%--------------DATA COLLECTION-----------------------%
+%% --------------DATA COLLECTION----------------------- %%
 
 % Data collected with non-linear ODEs model
 if mode == "REAL"
@@ -53,10 +56,11 @@ else
     [data_EDMD,n] = collect_data(f_discrete_with_LQR, umax, n, 'EDMD');
 end
 
-%--------------STATE-SPACE IDENTIFICATION WITH EDMD-----------------------%
+%% --------------STATE-SPACE IDENTIFICATION WITH EDMD----------------- %%
 
 % Bilinear EDMD lifted model
 [M_BILINEAR_CT, M_BILINEAR_DT, ~] = compute_edmd(data_EDMD, f_lifting, n, Ts, 'BILINEAR', 'RIDGE');
+save("M_BILINEAR_CT.mat", "M_BILINEAR_CT");
 
 % Linear EDMD lifted model
 [~, M_EDMD_DT, ~] = compute_edmd(data_EDMD, f_lifting, n, Ts, 'EDMD', 'RIDGE');
@@ -65,18 +69,29 @@ end
 [~, M_LINEAR_DT, ~] = compute_edmd(data_EDMD, f_linear, n, Ts, 'LINEAR', 'RIDGE');
 
 % Comparison of the 4 models
-comparison = compare_models(data_EDMD, f_lifting, M_BILINEAR_DT, M_EDMD_DT, M_LINEAR_DT, n);
+comparison = compare_models(data_EDMD, f_lifting, M_BILINEAR_DT, M_BILINEAR_CT, M_EDMD_DT, M_LINEAR_DT, n, Ts);
 
-% plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR_DT, M_EDMD_DT, M_BILINEAR_DT);
+% plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR_DT, M_EDMD_DT, M_BILINEAR_DT, M_BILINEAR_CT);
 
 
-%--------------DATA-DRIVEN FEEDBACK LINEARIZATION AND CONTROL-----------------------%
-[M_DDFL_CT, M_DDFL_DT] = feedback_linearization(f_lifting, M_BILINEAR_CT, n, 1, Ts);
+%% ---------DATA-DRIVEN FEEDBACK LINEARIZATION AND CONTROL-------------------- %%
+M_DDFL_CT = data_driven_feedback_linearization(f_lifting, M_BILINEAR_CT, n, 100);
+M_MBFL_CT = model_based_feedback_linearization(K_LQR);
+compare_FL_models(M_MBFL_CT, M_DDFL_CT);
 
-K = lqr(M_DDFL_CT.A, M_DDFL_CT.B, 0.01*eye(size(M_DDFL_CT.A, 1)), 0.016);
+% Q = [
+%     0.4, 0;
+%     0, 0.00001;
+% ];
+% R = 0.0001;
+% K = lqr(M_DDFL_CT.A, M_DDFL_CT.B, Q, R);
+K = [64, 14.4];
 
-% Reference
 q_ref = [0;0;0;0];
-z_ref = M_DDFL_DT.T(q_ref);
 
-trajs = simul_control(f_discrete_with_LQR, umax, n, M_DDFL_DT, K, z_ref);
+trajs = simul_control(f_discrete_with_LQR, M_BILINEAR_CT, n, M_DDFL_CT, K, q_ref, f_lifting, Ts);
+plot_valid_trajectories(trajs, Ts, 1000);
+
+
+%% -------------- ROBUST CONTROL ------------------------------ %%
+

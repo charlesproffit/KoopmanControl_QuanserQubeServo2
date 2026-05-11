@@ -1,4 +1,4 @@
-function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, M_BILINEAR)
+function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, M_BILINEAR_DT, M_BILINEAR_CT)
     % PLOTS
     
     % 0. Check folder
@@ -11,11 +11,12 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     figure;
     hold on
     plot(t, comparison.q_nonlinear(1,:,1));
-    plot(t, comparison.q_BILINEAR(1,:,1));
+    plot(t, comparison.q_BILINEAR_DT(1,:,1));
+    plot(t, comparison.q_BILINEAR_CT(1,:,1));
     plot(t, comparison.q_EDMD(1,:,1));
     plot(t, comparison.q_LINEAR(1,:,1));
     title("State q(1) : rotary arm angle [rad]");
-    legend("Nonlinear", "Bilinear", "EDMD", "Linear");
+    legend("Nonlinear", "Bilinear DT", "Bilinear CT", "EDMD", "Linear");
     savefig("figures\q1.fig");
     saveas(gcf, 'figures\q1.png');
     hold off
@@ -23,11 +24,12 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     figure;
     hold on
     plot(t, comparison.q_nonlinear(2,:,1));
-    plot(t, comparison.q_BILINEAR(2,:,1));
+    plot(t, comparison.q_BILINEAR_DT(2,:,1));
+    plot(t, comparison.q_BILINEAR_CT(2,:,1));
     plot(t, comparison.q_EDMD(2,:,1));
     plot(t, comparison.q_LINEAR(2,:,1));
     title("State q(2) : pendulum angle [rad]");
-    legend("Nonlinear", "Bilinear", "EDMD", "Linear");
+    legend("Nonlinear", "Bilinear DT", "Bilinear CT", "EDMD", "Linear");
     savefig("figures\q2.fig");
     saveas(gcf, 'figures\q2.png');
     hold off
@@ -35,11 +37,12 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     figure;
     hold on
     plot(t, comparison.q_nonlinear(3,:,1));
-    plot(t, comparison.q_BILINEAR(3,:,1));
+    plot(t, comparison.q_BILINEAR_DT(3,:,1));
+    plot(t, comparison.q_BILINEAR_CT(3,:,1));
     plot(t, comparison.q_EDMD(3,:,1));
     plot(t, comparison.q_LINEAR(3,:,1));
     title("State q(3) : rotary arm speed [rad/s]");
-    legend("Nonlinear", "Bilinear", "EDMD", "Linear");
+    legend("Nonlinear", "Bilinear DT", "Bilinear CT", "EDMD", "Linear");
     savefig("figures\q3.fig");
     saveas(gcf, 'figures\q3.png');
     hold off
@@ -47,11 +50,12 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     figure;
     hold on
     plot(t, comparison.q_nonlinear(4,:,1));
-    plot(t, comparison.q_BILINEAR(4,:,1));
+    plot(t, comparison.q_BILINEAR_DT(4,:,1));
+    plot(t, comparison.q_BILINEAR_CT(4,:,1));
     plot(t, comparison.q_EDMD(4,:,1));
     plot(t, comparison.q_LINEAR(4,:,1));
     title("State q(4) : pendulum speed [rad/s]");
-    legend("Nonlinear", "Bilinear", "EDMD", "Linear");
+    legend("Nonlinear", "Bilinear DT", "Bilinear CT", "EDMD", "Linear");
     savefig("figures\q4.fig");
     saveas(gcf, 'figures\q4.png');
     hold off
@@ -194,7 +198,7 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     
     
     figure;
-    semilogy(M_BILINEAR.svds);
+    semilogy(M_BILINEAR_DT.svds);
     title('Singular values of lifted states matrix for EDMD bilinear model');
     savefig("figures\svd_bilinear.fig");
     saveas(gcf, 'figures\svd_bilinear.png');
@@ -241,7 +245,7 @@ function plots_EDMD(n, Ts, mode, umax, comparison, data_EDMD, M_LINEAR, M_EDMD, 
     fprintf(f,"\n--- Condition number of lifted_Q ---\n");
     fprintf(f,"LINEAR : %.3f\n", M_LINEAR.condition_number);
     fprintf(f,"EDMD : %.3f\n", M_EDMD.condition_number);
-    fprintf(f,"BILINEAR : %.3f\n", M_BILINEAR.condition_number);
+    fprintf(f,"BILINEAR : %.3f\n", M_BILINEAR_DT.condition_number);
     
     fclose(f);
     
