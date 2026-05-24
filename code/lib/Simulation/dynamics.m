@@ -1,4 +1,4 @@
-function [f_continuous, f_discrete, parameters] = dynamics(Ts, discretization_method)
+function [f_continuous, f_discrete, f_discrete_with_LQR, parameters] = dynamics(Ts, discretization_method, K_LQR)
 
     % General parameters
     g = 9.81;
@@ -107,8 +107,8 @@ function [f_continuous, f_discrete, parameters] = dynamics(Ts, discretization_me
 
     parameters.f = @(q)f(q);
     parameters.g = @(q)g(q);
-    parameters.f_not_redundant = @(q)(-Mq(q)^(-1)*(H(q)+Phi(q)));
     parameters.g_not_redundant = @(q)(Mq(q)^(-1)*B);
+    parameters.f_not_redundant = @(q)(-Mq(q)^(-1)*(H(q)+Phi(q)) - parameters.g_not_redundant(q)*K_LQR*q);
 
     % q_dot(t) = f_continuous(q(t), u(t))
     f_continuous = @(q,u)(f(q)+g(q)*u);
@@ -123,6 +123,7 @@ function [f_continuous, f_discrete, parameters] = dynamics(Ts, discretization_me
     elseif strcmp(discretization_method, 'euler')
         f_discrete = @(q,u)(q+Ts*f_continuous(q,u));
     end
+    f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
 
 
 end

@@ -17,8 +17,8 @@ function [trajs] = simul_control(f_discrete, n, M_DDFL, K, q_ref)
     angle_region = 2*pi/n.regions;
     for i=1:n.trajs_control
         % Initial state
-        q(1,1,i) = 0;
-        q(2,1,i) = 0.5/3*pi*(2*rand() - 1);
+        q(1,1,i) = 1/3*pi*(2*rand() - 1);
+        q(2,1,i) = 2/3*pi*(2*rand() - 1);
         q(3,1,i) = 0;
         q(4,1,i) = 0;
         

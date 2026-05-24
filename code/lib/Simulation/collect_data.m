@@ -30,21 +30,21 @@ function [data,n] = collect_data(f_discrete, n)
         j = 1;
         while j <= (n.steps - 1)
             q(:,j+1,i) = f_discrete(q(:,j,i), noise(:,j,i));
-            % if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
-            %     % 1. Re randomize initial states
-            %     q(1,1,i) = 0;
-            %     region_id = randi([2, n.regions-1]);    % [1;16]
-            %     q(2,1,i) = -pi + angle_region *(region_id + rand() - 1);
-            %     q(3,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
-            %     q(4,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
-            %     % 2. Re randomize input (ie randomize noise again)
-            %     noise(:,:,i) = 2*n.umax*rand(n.inputs, n.steps, 1) - n.umax;
-            %     j = 1;
-            %     retries = retries + 1;
-            % else
-            %     j = j+1;
-            % end
-            j=j+1;
+            if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
+                % 1. Re randomize initial states
+                q(1,1,i) = 0;
+                region_id = randi([2, n.regions-1]);    % [1;16]
+                q(2,1,i) = -pi + angle_region *(region_id + rand() - 1);
+                q(3,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
+                q(4,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
+                % 2. Re randomize input (ie randomize noise again)
+                noise(:,:,i) = 2*n.umax*rand(n.inputs, n.steps, 1) - n.umax;
+                j = 1;
+                retries = retries + 1;
+            else
+                j = j+1;
+            end
+            % j=j+1;
         end
     end
     data.training.q = q;
@@ -74,21 +74,21 @@ function [data,n] = collect_data(f_discrete, n)
         j = 1;
         while j <= (n.steps - 1)
             q(:,j+1,i) = f_discrete(q(:,j,i), noise(:,j,i));
-            % if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
-            %     % 1. Re randomize initial states
-            %     q(1,1,i) = 0;
-            %     region_id = randi([2, n.regions-1]);    % [1;16]
-            %     q(2,1,i) = -pi + angle_region *(region_id + rand() - 1);
-            %     q(3,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
-            %     q(4,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
-            %     % 2. Re randomize input
-            %     noise(:,:,i) = 2*n.umax*rand(n.inputs, n.steps, 1) - n.umax;
-            %     j = 1;
-            %     retries = retries + 1;
-            % else
-            %     j = j+1;
-            % end
-            j=j+1;
+            if (abs(q(1,j+1,i)) >= pi/2 || abs(q(2,j+1,i) - q(2,1,i)) >= 2*pi || abs(q(2,j+1,i)) >= pi)
+                % 1. Re randomize initial states
+                q(1,1,i) = 0;
+                region_id = randi([2, n.regions-1]);    % [1;16]
+                q(2,1,i) = -pi + angle_region *(region_id + rand() - 1);
+                q(3,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
+                q(4,1,i) = 5*pi*(2*rand() - 1); % [-5*pi;5*pi]
+                % 2. Re randomize input
+                noise(:,:,i) = 2*n.umax*rand(n.inputs, n.steps, 1) - n.umax;
+                j = 1;
+                retries = retries + 1;
+            else
+                j = j+1;
+            end
+            % j=j+1;
         end
     end
     data.testing.q = q;

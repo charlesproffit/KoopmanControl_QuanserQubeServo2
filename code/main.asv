@@ -36,13 +36,12 @@ end
 %% -------- DYNAMICS DEFINITION --------------------------- %%
 % Design of internal LQR
 [SS_LINEAR_CT, SS_LINEAR_DT] = dynamics_linearized([0;0;0;0],0,Ts);
-[K_LQR, ~, ~] = dlqr(SS_LINEAR_DT.A, SS_LINEAR_DT.B, diag([0.41, 0, 0, 0]), 0.016);
-% K_LQR = [4,1,0,0];
-K_LQR = [0,0,0,0];
+% [K_LQR, ~, ~] = dlqr(SS_LINEAR_DT.A, SS_LINEAR_DT.B, diag([0.41, 0, 0, 0]), 0.016);
+K_LQR = [4,1,0,0];
+% K_LQR = [0,0,0,0];
 
 % Dynamics
-[f_continuous, f_discrete, funcs] = dynamics(Ts, 'euler');
-f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
+[f_continuous, f_discrete, f_discrefuncs] = dynamics(Ts, 'euler', K_LQR);
 
 % f_lifting = @(q)[
 %     1;
@@ -66,13 +65,19 @@ f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
 %     % q(3) / funcs.D(q);
 % ];
 
+temp = @(q)(funcs.f(q) - funcs.g(q)*K_LQR*q);
+f_not_redundant = temp(3:4);
+temp = @(q)(funcs.g(q));
+g_not_redundant = temp(3:4);
+
 f_lifting = @(q)[
     1;
     q;
-    funcs.f(q);
-    funcs.f_not_redundant(q);
+    % funcs.f(q);
     % funcs.f(q) - funcs.g(q)*K_LQR*q;
-    funcs.g(q);
+    % funcs.g(q);
+    f_not_redundant(q);
+    g_not_redundant(q);
 ];
 f_linear = @(q)[q(1); q(2); q(3); q(4)];
 n.lifted_states = size(f_lifting(zeros(n.states,1)),1);
@@ -109,7 +114,7 @@ disp('N_clean:'); disp(N_clean)
 % Comparison of the 4 models
 comparison = compare_models_EDMD(data_EDMD, f_lifting, M_BILINEAR_DT, M_BILINEAR_CT, M_EDMD_DT, M_LINEAR_DT, n, Ts);
 
-% plots_EDMD(n, Ts, mode, comparison, data_EDMD);
+plots_EDMD(n, Ts, mode, comparison, data_EDMD);
 
 
 %% ---------DATA-DRIVEN FEEDBACK LINEARIZATION SYSTEM-------------------- %%

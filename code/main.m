@@ -21,7 +21,7 @@ n.regions = 16;     % Number of subdivisions of a full circle for the initial co
 n.controlled_states = 2;
 n.train_test_ratio = 0.8;
 n.cross_val_groups = 5;
-n.trajs_control = 2;
+n.trajs_control = 10;
 n.umax = 15;          % Max possible input
 mode = "SIM";
 
@@ -37,12 +37,9 @@ end
 % Design of internal LQR
 [SS_LINEAR_CT, SS_LINEAR_DT] = dynamics_linearized([0;0;0;0],0,Ts);
 [K_LQR, ~, ~] = dlqr(SS_LINEAR_DT.A, SS_LINEAR_DT.B, diag([0.41, 0, 0, 0]), 0.016);
-% K_LQR = [4,1,0,0];
-K_LQR = [0,0,0,0];
 
 % Dynamics
-[f_continuous, f_discrete, funcs] = dynamics(Ts, 'euler');
-f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
+[f_continuous, f_discrete, f_discrete_with_LQR, funcs] = dynamics(Ts, 'euler', K_LQR);
 
 % f_lifting = @(q)[
 %     1;
@@ -69,13 +66,10 @@ f_discrete_with_LQR = @(q,u) f_discrete(q,u - K_LQR*q);
 f_lifting = @(q)[
     1;
     q;
-    % funcs.f(q);
     funcs.f_not_redundant(q);
-    % funcs.f(q) - funcs.g(q)*K_LQR*q;
     funcs.g_not_redundant(q);
-    % funcs.g(q);
 ];
-f_linear = @(q)[q(1); q(2); q(3); q(4)];
+f_linear = @(q)(q);
 n.lifted_states = size(f_lifting(zeros(n.states,1)),1);
 
 %% --------------DATA COLLECTION----------------------- %%
@@ -91,7 +85,6 @@ end
 
 % Bilinear EDMD lifted model
 [M_BILINEAR_CT, M_BILINEAR_DT] = compute_EDMD(data_EDMD, f_lifting, n, Ts, 'BILINEAR', 'LS');
-% M_BILINEAR_CT.A = M_BILINEAR_CT.A + M_BILINEAR_CT.N*K_LQR*M_BILINEAR_CT.C;
 save("data\M_BILINEAR_CT.mat", "M_BILINEAR_CT");
 
 tol = 1e-9;  % adjust to taste
@@ -116,16 +109,6 @@ plots_EDMD(n, Ts, mode, comparison, data_EDMD);
 %% ---------DATA-DRIVEN FEEDBACK LINEARIZATION SYSTEM-------------------- %%
 M_DDFL_CT = compute_DDFL(f_lifting, M_BILINEAR_CT, n, 1e-6);
 M_MBFL_CT = compute_MBFL(K_LQR);
-
-% scaling
-% x0 = [0; 0; 0; 0];
-% gamma_D = M_DDFL_CT.gamma(x0);
-% gamma_M = M_MBFL_CT.gamma(x0);
-% scale = gamma_M / gamma_D;
-% gamma_old = M_DDFL_CT.gamma;
-% % etta_old  = M_DDFL_CT.etta;
-% M_DDFL_CT.gamma = @(q)(scale * gamma_old(q));
-% % M_DDFL_CT.etta  = @(q)(scale * etta_old(q));
 
 save("data\M_MBFL_CT.mat", "M_MBFL_CT");
 save("data\M_DDFL_CT.mat", "M_DDFL_CT");
@@ -155,10 +138,7 @@ M_OL.etta = @(q)(0);
 M_OL.gamma = @(q)(1);
 M_OL.T = @(q)(q);
 [K_OL, ~, ~] = dlqr(SS_LINEAR_DT.A, SS_LINEAR_DT.B, diag([0.41, 0, 0.01, 0]), 0.01);
-% n.train_test_ratio = 1;
-% n.umax = 0;
-% [data_EDMD_2,n] = collect_data(f_discrete_with_LQR, n);
-% trajs_OL_LQR_only = data_EDMD_2.training;
+
 disp('Collecting trajectories with external K on linearized system');
 trajs_OL_LQR_only = simul_control(f_discrete_with_LQR, n, M_OL, K_OL, q_ref);
 plots_FL_CL(trajs_OL_LQR_only, Ts, 1000, 'OL, SIM data');
@@ -170,14 +150,6 @@ compare_models_FL_CL(trajs_OL_LQR_only, trajs_CL_DDFL, 'OL Vs CL_{DDFL}, SIM dat
 [data_EDMD_real,n] = structure_data('data.mat', n, 'all');
 [M_BILINEAR_CT_real, ~] = compute_EDMD(data_EDMD_real, f_lifting, n, Ts, 'BILINEAR', 'LS');
 M_DDFL_CT_real = compute_DDFL(f_lifting, M_BILINEAR_CT_real, n, 1e-6);
-
-% %scaling
-% x0 = [0; 0; 0; 0];
-% gamma_D = M_DDFL_CT_real.gamma(x0);
-% gamma_M = M_MBFL_CT.gamma(x0);
-% scale = gamma_M / gamma_D;
-% gamma_old = M_DDFL_CT_real.gamma;
-% M_DDFL_CT_real.gamma = @(q)(scale * gamma_old(q));
 
 save("data\M_DDFL_CT_real.mat", "M_DDFL_CT_real");
 
