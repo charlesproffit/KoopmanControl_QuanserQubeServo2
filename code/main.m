@@ -110,7 +110,7 @@ disp('N_clean:'); disp(N_clean)
 % Comparison of the 4 models
 comparison = compare_models_EDMD(data_EDMD, f_lifting, M_BILINEAR_DT, M_BILINEAR_CT, M_EDMD_DT, M_LINEAR_DT, n, Ts);
 
-% plots_EDMD(n, Ts, mode, comparison, data_EDMD);
+plots_EDMD(n, Ts, mode, comparison, data_EDMD);
 
 
 %% ---------DATA-DRIVEN FEEDBACK LINEARIZATION SYSTEM-------------------- %%
