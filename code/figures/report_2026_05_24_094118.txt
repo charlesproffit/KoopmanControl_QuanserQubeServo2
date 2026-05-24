@@ -1,0 +1,35 @@
+==== TEST CONFIGURATION ====
+Ts = 0.008
+mode = SIM
+n.umax = 15.000
+
+--- n parameters ---
+n.states = 4
+n.inputs = 1
+n.outputs = 1
+n.lifted_states = 9
+n.trajs = 100
+n.steps = 2500
+n.train_test_ratio = 0.800
+n.trajs_training = 80
+n.trajs_testing = 20
+n.lifted_states = 9
+
+--- TRAINING ERRORS ---
+LINEAR Fro = 71.144
+EDMD Fro = 63.615
+BILINEAR Fro = 63.613
+
+--- TESTING ERRORS (true states) ---
+LINEAR fro = 216.218
+EDMD fro = 225.557
+BILINEAR fro = 225.642
+
+--- TESTING ERRORS (lifted states) ---
+EDMD lifted fro = 4709.878
+BILINEAR lifted fro = 4710.062
+
+--- Condition number of lifted_Q ---
+LINEAR : 29.366
+EDMD : 106869664777751552.000
+BILINEAR : 108852858492635136.000
