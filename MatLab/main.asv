@@ -54,7 +54,7 @@ func_inputs = @() 2*numax*rand(ninputs,nsteps) - numax;
 
 % dataset = Sim_NL.generateDataset(ntrajs_training,ntrajs_testing,nsteps,func_initialStates,func_inputs,'euler');
 % % OR
-[dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data\data.tdms', nstates, ninputs, 0.8, 'all',true);
+[dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data\data.tdms', nstates, ninputs, 0.8, 'all');
 
 
 %% -------------- EDMD ----------------------- %%
@@ -119,10 +119,3 @@ comparison_Control = compare_FL( {X_DDFL, X_MBFL, X_AggressiveLQR}, {'DDFL', 'MB
 [data_results_agressivelqr_track, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\6june\data_aggressivelqrtracking.tdms", nstates, ninputs, 0.8, 'all',false);
 [data_results_moderatelqr_track, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\6june\data_moderatelqrtracking.tdms", nstates, ninputs, 0.8, 'all',false);
 
-comparison_Results = compare_FL( ...
-    {data_results_lqr.testing, data_results_mbfl.testing, data_results_ddfl.testing}, ...
-    {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000);
-
-comparison_Tracking = compare_FL( ...
-    {data_results_mbfl_track.testing, data_results_ddfl_track.testing}, ...
-    {'MBFL Tracking', 'DDFL Tracking'}, Ts, 1000);

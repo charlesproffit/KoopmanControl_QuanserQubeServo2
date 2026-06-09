@@ -1,12 +1,6 @@
-function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path, nstates, ninputs, train_test_ratio, steps_length)
+function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path, nstates, ninputs, train_test_ratio, steps_length, discarding)
 
-    if endsWith(data_path, ".mat")
-        load(data_path, 'data');
-        raw = data;
-        clear data;
-    else
-        raw = tdmsread(data_path);
-    end
+    raw = tdmsread(data_path);
 
     valid_trajs  = {};
     valid_count  = 0;
@@ -46,7 +40,7 @@ function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path
         end
 
         % Discard if pendulum leaves [-pi, pi]
-        if any(abs(q(2,:)) > pi)
+        if discarding && any(abs(q(2,:)) > pi)
             continue;
         end
 
@@ -57,11 +51,6 @@ function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path
         valid_trajs{valid_count} = traj;
     end
 
-    % Save on first load
-    if ~endsWith(data_path, ".mat")
-        data = valid_trajs;
-        save("data.mat", "data");
-    end
     clear data;
 
     ntrajs          = numel(valid_trajs);
@@ -73,15 +62,10 @@ function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path
     data.training.U = zeros(ninputs, nsteps, ntrajs_training);
     data.testing.X  = zeros(nstates, nsteps, ntrajs_testing);
     data.testing.U  = zeros(ninputs, nsteps, ntrajs_testing);
-
-    if has_ref_glob
-        data.training.Ref = zeros(1, nsteps, ntrajs_training);
-        data.testing.Ref  = zeros(1, nsteps, ntrajs_testing);
-    end
-    if has_v_glob
-        data.training.V = zeros(1, nsteps, ntrajs_training);
-        data.testing.V  = zeros(1, nsteps, ntrajs_testing);
-    end
+    data.training.Ref = zeros(nstates, nsteps, ntrajs_training);
+    data.testing.Ref  = zeros(nstates, nsteps, ntrajs_testing);
+    data.training.V = zeros(1, nsteps, ntrajs_training);
+    data.testing.V  = zeros(1, nsteps, ntrajs_testing);
 
     ar = randperm(ntrajs);
     for i = 1:ntrajs
@@ -93,7 +77,7 @@ function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path
         end
         data.(split).X(:,:,idx) = traj.X;
         data.(split).U(:,:,idx) = traj.U;
-        if has_ref_glob; data.(split).Ref(:,:,idx) = traj.Ref; end
+        if has_ref_glob; data.(split).Ref(1,:,idx) = traj.Ref; end
         if has_v_glob;   data.(split).V(:,:,idx)   = traj.V;   end
     end
 
