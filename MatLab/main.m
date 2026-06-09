@@ -1,0 +1,109 @@
+clc;
+clear;
+close all;
+addpath(genpath('src'));
+
+rng(43);
+
+% States q :
+%   q(1) => Angle of rotary arm
+%   q(2) => Angle of pendulum arm
+%   q(3) => Angular speed of rotary arm q(1)_dot
+%   q(4) => Angular speed of pendulum arm q(2)_dot
+
+%% ------------- SYSTEM PARAMETERS ---------------------------- %%
+Ts = 0.008;                                     % Time step
+nstates = 4;                                    % Number of states
+ninputs = 1;                                    % Number of inputs   
+nregions = 16;                                  % Number of subdivisions of a full circle for the initial conditions
+angle_region = 2*pi/nregions;                   % Angle range per region for initial angle
+ncontrolled_states = 2;                         % For partial FL and collocated control
+ncross_val_groups = 5;                          % For ridge regression and choice of lambda
+numax = 7;                                      % Max possible input
+nsteps = 500;                                   % Total number of steps per trajectory (u(k)=0 if k>n.steps_excited)
+ntrajs_training = 160;                          % Trajectories for training EDMD models
+ntrajs_testing = 40;                            % Trajectories for testing and simulating control
+
+%% -------- DYNAMICS DEFINITION --------------------------- %%
+
+[Mq,H,Phi,B] = QuanserQubeDynamicsCompactForm();
+func_discard = @(x,x0) abs(x(1)) >= pi/2 || abs(x(2)-x0(2)) >= 2*pi || abs(x(2)) >= pi;
+Model_NL = NLModel(nstates,ninputs,Ts,Mq,H,Phi,B);
+K_LQR = Model_NL.designLQR([0;0;0;0], 0, diag([0.41 0 0 0]), 0.016);
+
+func_lifting = @(q)[
+    1;
+    q;
+    Model_NL.f_nr(q) - Model_NL.g_nr(q)*K_LQR*q;
+    Model_NL.g_nr(q);
+];
+func_linear = @(q)(q);
+nlifted_states = size(func_lifting(zeros(nstates,1)),1);
+
+%% --------------DATA COLLECTION----------------------- %%
+Sim_NL = OLSimulator(Model_NL,func_discard);
+
+func_initialStates = @() [
+    0;
+    -pi + angle_region * (randi([2,nregions-1]) + rand() - 1);
+    5*pi*(2*rand()-1);
+    5*pi*(2*rand()-1)
+];
+func_inputs = @() 2*numax*rand(ninputs,nsteps) - numax;
+
+% dataset = Sim_NL.generateDataset(ntrajs_training,ntrajs_testing,nsteps,func_initialStates,func_inputs,'euler');
+% % OR
+[dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data.tdms', nstates, ninputs, 0.8, 50);
+
+
+%% -------------- EDMD ----------------------- %%
+
+Model_BILIN = EDMDModel("BILINEAR", "LS", func_lifting, nstates, ninputs, nlifted_states, Ts, ncross_val_groups);
+Model_BILIN.EDMDIdentification(dataset);
+Sim_BILIN = OLSimulator(Model_BILIN);
+X_BILIN = Sim_BILIN.simulate_multistep(dataset.testing.X(:,1,:), dataset.testing.U,'euler');
+X_BILIN_onestep = Sim_BILIN.simulate_onestep(dataset.testing.X, dataset.testing.U,'euler');
+
+Model_EDMD = EDMDModel("LINEAR", "LS", func_lifting, nstates, ninputs, nlifted_states, Ts, ncross_val_groups);
+Model_EDMD.EDMDIdentification(dataset);
+Sim_EDMD = OLSimulator(Model_EDMD);
+X_EDMD = Sim_EDMD.simulate_multistep(dataset.testing.X(:,1,:), dataset.testing.U,'euler');
+X_EDMD_onestep = Sim_BILIN.simulate_onestep(dataset.testing.X, dataset.testing.U,'euler');
+
+Model_LIN = EDMDModel("LINEAR", "LS", func_linear, nstates, ninputs, nstates, Ts, ncross_val_groups);
+Model_LIN.EDMDIdentification(dataset);
+Sim_LIN = OLSimulator(Model_LIN);
+X_LIN = Sim_LIN.simulate_multistep(dataset.testing.X(:,1,:), dataset.testing.U,'euler');
+X_LIN_onestep = Sim_LIN.simulate_onestep(dataset.testing.X, dataset.testing.U,'euler');
+
+data = dataset;
+comparison_Identification = compare_EDMD(dataset, X_BILIN, X_EDMD, X_LIN, X_BILIN_onestep, X_EDMD_onestep, X_LIN_onestep, Model_BILIN, Model_EDMD, Model_LIN);
+
+% plots_EDMD(Ts, comparison_Identification);
+
+%% ---------DATA-DRIVEN FEEDBACK LINEARIZATION SYSTEM-------------------- %%
+
+q_ref = zeros(nstates,nsteps,ntrajs_testing);
+
+% DDFL
+Model_DDFL = DDFLModel(func_lifting,nlifted_states,ncontrolled_states,Ts);
+Model_DDFL.DDFLIdentification(Model_BILIN);
+Controller_DDFL = FLController(Model_DDFL);
+K_DDFL = Controller_DDFL.designLQR(diag([10000, 1]), 1);
+Sim_DDFL = CLSimulator(Model_NL,Controller_DDFL);
+X_DDFL = Sim_DDFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
+
+% MBFL
+Model_MBFL = MBFLModel(K_LQR,Ts);
+Controller_MBFL = FLController(Model_MBFL);
+K_DMBFL = Controller_MBFL.designLQR(diag([10000, 1]), 1);
+Sim_MBFL = CLSimulator(Model_NL,Controller_MBFL);
+X_MBFL = Sim_MBFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
+
+% Aggressive LQR
+Controller_AggressiveLQR = SFController(Model_NL);
+K_AggressiveLQR = Controller_AggressiveLQR.designLQR([0;0;0;0], 0, diag([10000, 0, 1, 0]), 1);
+Sim_AggressiveLQR = CLSimulator(Model_NL, Controller_AggressiveLQR);
+X_AggressiveLQR = Sim_AggressiveLQR.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
+
+comparison_Control = compare_FL( {X_DDFL, X_MBFL, X_AggressiveLQR}, {'DDFL', 'MBFL', 'Aggressive LQR'}, Ts, 1000);
