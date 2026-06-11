@@ -75,11 +75,14 @@ function [data,nsteps,ntrajs_training,ntrajs_testing] = structure_data(data_path
         else
             split = 'testing';  idx = i - ntrajs_training;
         end
-        data.(split).X(:,:,idx) = traj.X;
-        data.(split).U(:,:,idx) = traj.U;
-        if has_ref_glob; data.(split).Ref(1,:,idx) = traj.Ref; end
-        if has_v_glob;   data.(split).V(:,:,idx)   = traj.V;   end
+        data.(split).X(:,:,idx) = traj.X(:,1:nsteps);
+        data.(split).U(:,:,idx) = traj.U(:,1:nsteps);
+        if has_ref_glob; data.(split).Ref(1,:,idx) = traj.Ref(:,1:nsteps); end
+        if has_v_glob;   data.(split).V(:,:,idx)   = traj.V(:,1:nsteps);   end
     end
+
+    ntrajs_training = size(data.training.X,3);
+    ntrajs_testing = size(data.testing.X,3);
 
     fprintf('Valid trajectories kept: %d / %d\n', ntrajs, numel(raw));
 end
