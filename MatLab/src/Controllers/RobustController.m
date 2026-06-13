@@ -16,6 +16,9 @@ classdef RobustController < handle
         G_Set       % Multimodel set
         G_nominal
         relerr      % Errors wrt nominal model
+        G_nominal_theory    % Nominal Brunovsky matrices model
+        relerr_theory
+
     end
     
     methods (Access=public)
@@ -33,53 +36,42 @@ classdef RobustController < handle
             u = obj.FLModel.u(v, x);
 
         end
-        
-        function buildMultimodelSet(obj, data_robust, nfolds, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups)
             
-            ntrajs_training = size(data_robust.training.X, 3);
-            traj_per_fold = floor(ntrajs_training / nfolds);
-            
-            G_set = [];
-            A_sum = zeros(size(obj.FLModel.A_c));
-            B_sum = zeros(size(obj.FLModel.B_c));
-            
-            for i = 1:nfolds
-                Model_ROBUST = EDMDModel("LINEAR", "LS", func_linear, ncontrolled_states, ninputs, ncontrolled_states, Ts, ncross_val_groups);
+            function buildMultimodelSet(obj, data_robust, nfolds, Ts)
                 
-                dataset_fold.training.X = data_robust.training.X([1,3], :, traj_per_fold*(i-1)+1 : traj_per_fold*i);
-                dataset_fold.training.U = data_robust.training.U(:, :, traj_per_fold*(i-1)+1 : traj_per_fold*i);
+                ntrajs_training = size(data_robust.training.X, 3);
+                traj_per_fold = floor(ntrajs_training / nfolds);
                 
-                Model_ROBUST.EDMDIdentification(dataset_fold);
-                
-                A_sum = A_sum + Model_ROBUST.A_CT;
-                B_sum = B_sum + Model_ROBUST.B_CT;
-                
-                if isempty(G_set)
-                    G_set = c2d(ss(Model_ROBUST.A_CT, Model_ROBUST.B_CT, [1, 0], 0), Ts);
-                else
-                    G_set = stack(1, G_set, c2d(ss(Model_ROBUST.A_CT, Model_ROBUST.B_CT, [1, 0], 0), Ts));
+                G_set = [];
+    
+                freqs = logspace(log10(0.1),log10(0.999*pi/Ts),400);
+
+                for i = 1:nfolds
+                    y = [];
+                    u = [];
+                    for j = traj_per_fold*(i-1)+1 : traj_per_fold*i
+                        y = [y; data_robust.training.X(1, :, j)'];
+                        u = [u; data_robust.training.V(:, :, j)'];
+                    end
+                    if isempty(G_set)
+                        G_set = spa(iddata(y, u, Ts), [], freqs);
+                    else
+                        G_set = stack(1, G_set, spa(iddata(y, u, Ts), [], freqs));
+                    end
                 end
+                obj.G_Set = G_set;
+    
+                obj.G_nominal_theory = c2d(ss(obj.FLModel.A_c, obj.FLModel.B_c, [1, 0], 0), Ts);
+                obj.relerr_theory = obj.G_nominal_theory\(obj.G_nominal_theory-obj.G_Set);
+                
             end
-            
-            obj.G_Set = G_set;
-            obj.G_nominal = c2d(ss(A_sum / nfolds, B_sum / nfolds, [1, 0], 0), Ts);
-            % obj.G_nominal = c2d(ss(obj.FLModel.A_c, obj.FLModel.B_c, [1, 0], 0), Ts);
-
-            obj.relerr = obj.G_nominal\(obj.G_nominal-obj.G_Set);
-
-            figure;
-            bodemag(obj.relerr,'b--', {0.1, pi/Ts});
-            legend('Relerr', 'Location', 'southeast');
-            title('Multimodel set error wrt nominal model');
-            grid on;
-            
-        end
         
         function designMixsyn(obj, W1, W2, W3)
             obj.method = 'mixsyn';
             obj.W1 = W1;
             obj.W2 = W2;
             obj.W3 = W3;
+
             [obj.K, ~, obj.gamma] = mixsyn(obj.G_nominal, obj.W1, obj.W3, obj.W2);
             obj.computeTF();
             fprintf('Mixsyn done. Gamma = %.4f\n', obj.gamma);
@@ -119,22 +111,27 @@ classdef RobustController < handle
             obj.computeTF();
             fprintf('Data-driven done.Gamma = %.4f\n', obj.gamma);
         end
-        
+
         function validate(obj)
-            nmodels = size(obj.G_Set, 3);
-            fprintf('Validation across models \n');
-            for i = 1:nmodels
-                G_i = obj.G_Set(:,:,i);
-                S_i = feedback(1, G_i * obj.K);
-                stable_S = isstable(S_i);
-                fprintf('Fold %d : stable: %d \n', i, stable_S);
-            end
+            G = ss(obj.G_nominal);
+            S = feedback(1, G * obj.K);
+            T = feedback(G * obj.K, 1);
+            
+            [gm, pm] = margin(G * obj.K);
+            stable = isstable(S);
+            
+            fprintf('Nominal model validation:\n');
+            fprintf('Stable: %d | GM=%.2f dB | PM=%.2f deg\n', ...
+                stable, 20*log10(gm), pm);
+            fprintf('Peak S: %.2f dB | Peak T: %.2f dB\n', ...
+                20*log10(norm(S,'inf')), 20*log10(norm(T,'inf')));
         end
-        
+    
         function plotTFs(obj)
-            S = feedback(1, obj.G_nominal * obj.K);
-            T = feedback(obj.G_nominal * obj.K, 1);
-            U = feedback(obj.K, obj.G_nominal);
+            G = ss(obj.G_nominal);
+            S = feedback(1, G * obj.K);
+            T = feedback(G * obj.K, 1);
+            U = feedback(obj.K, G);
             
             figure;
             bodemag(S, 1/obj.W1);
@@ -158,7 +155,6 @@ classdef RobustController < handle
             step(T);
             title(['Step response - ' obj.method]);
             grid on;
-
         end
                 
         function computeTF(obj)
