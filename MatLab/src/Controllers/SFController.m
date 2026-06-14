@@ -15,9 +15,10 @@ classdef SFController < handle
 
         end
 
-        function u = compute_u(obj, x,x_ref)
+        function [u,v] = compute_u(obj, x,x_ref)
 
             u = -obj.K*(x-x_ref);
+            v = 0;
 
         end
 

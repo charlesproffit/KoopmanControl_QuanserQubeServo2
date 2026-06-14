@@ -41,6 +41,7 @@ classdef CLSimulator < handle
                 
             Xtot = zeros(obj.sys.nx, nSteps, nTrajs);
             Utot = zeros(obj.sys.nu, nSteps, nTrajs);
+            Vtot = zeros(obj.sys.nu, nSteps, nTrajs);
         
             for i = 1:nTrajs
                 x0 = initialStateFcn();
@@ -49,8 +50,9 @@ classdef CLSimulator < handle
                 for k = 1:nSteps-1
                     x_k = Xtot(:,k,i);
                     q_ref = Ref(:,k,i);
-                    u_k = obj.controller.compute_u(x_k, q_ref);
+                    [u_k,v_k] = obj.controller.compute_u(x_k, q_ref);
                     Utot(:,k,i) = u_k;
+                    Vtot(:,k,i) = v_k;
         
                     switch method
                         case 'euler'
@@ -67,6 +69,7 @@ classdef CLSimulator < handle
         
             trajs.X = Xtot;
             trajs.U = Utot;
+            trajs.V = Vtot;
             trajs.Ref = Ref;
 
         end

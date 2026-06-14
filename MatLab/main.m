@@ -45,16 +45,21 @@ nlifted_states = size(func_lifting(zeros(nstates,1)),1);
 %% --------------DATA COLLECTION----------------------- %%
 Sim_NL = OLSimulator(Model_NL,func_discard);
 
+% Function to generate initial state of trajectories
 func_initialStates = @() [
     0;
     -pi + angle_region * (randi([2,nregions-1]) + rand() - 1);
     5*pi*(2*rand()-1);
     5*pi*(2*rand()-1)
 ];
+
+% To generate random input for data collection
 func_inputs = @() 2*numax*rand(ninputs,nsteps) - numax;
 
+% For simulation data
 % dataset = Sim_NL.generateDataset(ntrajs_training,ntrajs_testing,nsteps,func_initialStates,func_inputs,'euler');
-% % OR
+
+% For real data 
 [dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data\data.tdms', nstates, ninputs, 0.8, 50, true);
 
 
@@ -131,296 +136,74 @@ comparison_Tracking = compare_FL( ...
 
 
 %% -------------------- ROBUST CONTROL DESIGN --------------------------%%
+% Collect data
 
-[data_robust, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\12june\data.tdms", nstates, ninputs, 1, 'all', true);
+% In Simulation
+% ntrajs_testing = 25;
+% nsteps = 500;
+% q_ref = zeros(nstates,nsteps,ntrajs_testing);
+% Controller_DDFL.switch_mode("collect data", 300);
+% Sim_DDFL = CLSimulator(Model_NL,Controller_DDFL);
+% X_data_robust = Sim_DDFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
+% data_robust_sim.training = X_data_robust;
+% Controller_Robust_Mixsyn_Sim = RobustController(Model_DDFL);
+% Controller_Robust_Mixsyn_Sim.buildMultimodelSet(data_robust_sim, 5, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups);
 
-%%
-% Take one trajectory
-y = data_robust.training.X(1, :, 1)';
-u = data_robust.training.V(:, :, 1)';
+% On real hardware
+[data_robust, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\14june\data.tdms", nstates, ninputs, 1, 'all', true);
 
-% Cross-correlation between u and y
-figure;
-xcorr_result = xcorr(u - mean(u), y - mean(y), 'normalized');
-lags = -(length(u)-1):(length(u)-1);
-plot(lags * Ts, xcorr_result);
-xlabel('Lag (seconds)');
-ylabel('Normalized cross-correlation');
-title('Cross-correlation between v and x1');
-xline(0, 'r--', 'Zero lag');
-grid on;
+%% Create controllers object
+Controller_Robust_Mixsyn = RobustController(Model_DDFL);
+Controller_Robust_Mixsyn.buildMultimodelSet(data_robust, 5, Ts);
 
-%%
-figure;
-pwelch(u, [], [], [], 1/Ts);
-title('Power spectrum of v - is there energy below 1 Hz?');
-%%
+Controller_Robust_DD = RobustController(Model_DDFL);
+Controller_Robust_DD.buildMultimodelSet(data_robust, 5, Ts);
 
-figure;
-subplot(3,1,1); plot((0:length(u)-1)*Ts, u); ylabel('logged V'); grid on;
-subplot(3,1,2); plot((0:length(y)-1)*Ts, y); ylabel('x1'); grid on;
-subplot(3,1,3); 
-mscohere(u, y, [], [], [], 1/Ts);
-ylabel('Coherence'); xlabel('Frequency (Hz)');
-title('Coherence between logged V and x1');
-grid on;
-
-%%
-% Create controllers object
-nfolds = 5;
-K_ROB_MIXSYN = RobustController(Model_DDFL);
-K_ROB_MIXSYN.buildMultimodelSet(data_robust, nfolds, Ts);
-%%
+%% Filter design
 
 % Robustness filter W2
-for i = 1:nfolds
-    G_nom = ss(ssest(K_ROB_MIXSYN.G_Set(:,:,i,1),2, 'Ts', Ts));
-    [~,Info] = ucover(K_ROB_MIXSYN.G_Set,G_nom,2);
-    W2 = Info.W1;
-    relerr = (G_nom - K_ROB_MIXSYN.G_Set) / G_nom;
-    figure;
-    bodemag(relerr,'b--', W2, 'g', {0.1, pi/Ts});
-    legend('Relerr','W2(s)', 'Location', 'southeast');
-    title('TFs');
-    grid on;
-    figure;
-    bodemag(K_ROB_MIXSYN.G_nominal_theory,'b', G_nom, 'g', {0.1, pi/Ts});
-    grid on;
-end
-%%
-K_ROB_MIXSYN.G_nominal = ss(ssest(K_ROB_MIXSYN.G_Set(:,:,4,1),2, 'Ts', Ts));
-% K_ROB_MIXSYN.G_nominal = K_ROB_MIXSYN.G_nominal_theory;
-K_ROB_MIXSYN.relerr = (K_ROB_MIXSYN.G_nominal - K_ROB_MIXSYN.G_Set) / K_ROB_MIXSYN.G_nominal;
-
-%%
-[~,Info] = ucover(K_ROB_MIXSYN.G_Set,K_ROB_MIXSYN.G_nominal,2);
+Parray = frd(Controller_Robust_Mixsyn.G_Set,logspace(-1,2.55,60));
+[~,Info] = ucover(Parray,Controller_Robust_Mixsyn.G_nominal,3);
 W2 = Info.W1;
-figure;
-bodemag(K_ROB_MIXSYN.relerr,'b--',W2, 'g', {0.1, pi/Ts});
-legend('Relerr','W2(s)', 'Location', 'southeast');
-title('TFs');
-grid on;
-%%
 
 % Performance filter W1
-% s = tf('s');
-% W1 = c2d(2/(1+s/40),Ts);
-W1_LP = makeweight(2,    35, 0.01);
-W1_HP = makeweight(0.01,   30,  2);
-W1    = c2d(W1_LP * W1_HP, Ts);
+s = tf('s');
+tol = 1e-5;
+m = 0.5;
+omega_b = 5;
+W1 = c2d((m * (s + omega_b)) / (s + tol), Ts);
 
 % Input filter W3
-W3 = c2d(tf(1/200),Ts);
+W3 = c2d(tf(1/300),Ts);
 % W3 = [];
 
 figure;
-bodemag(K_ROB_MIXSYN.relerr,'b--',W1, 'r', W2, 'g',K_ROB_MIXSYN.G_nominal, 'b', {0.1, pi/Ts});
+bodemag(Controller_Robust_Mixsyn.relerr,'b--',W1, 'r', W2, 'g', {0.1, pi/Ts});
 legend('Relerr','$W1(s)$','$W2(s)$','Interpreter','latex', 'Location', 'southeast');
 title('TFs');
 grid on;
 
-%%
+%% Design mixsyn controller
+Controller_Robust_Mixsyn.designMixsyn(W1, W2, W3);
+Controller_Robust_Mixsyn.validate();
+Controller_Robust_Mixsyn.plotTFs();
 
-% Design mixsyn controller
-K_ROB_MIXSYN.designMixsyn(W1, W2, W3);
-K_ROB_MIXSYN.validate();
-K_ROB_MIXSYN.plotTFs();
+%% Design data-driven robust contoller
+Controller_Robust_DD.designDataDriven(W1, W2, W3, Ts, ncontrolled_states, ninputs);
+Controller_Robust_DD.validate();
+Controller_Robust_DD.plotTFs();
 
-%%
+%% Simulation
 
-K_ROB_DD = RobustController(Model_DDFL);
-K_ROB_DD.buildMultimodelSet(data_robust, nfolds, Ts);
+ntrajs_testing = 1;
+nsteps = 500;
 
-K_ROB_DD.G_nominal = ss(ssest(K_ROB_DD.G_Set(:,:,4,1),2, 'Ts', Ts));
-K_ROB_DD.relerr = (K_ROB_DD.G_nominal - K_ROB_DD.G_Set) / K_ROB_DD.G_nominal;
+% Reference to track 
+q_ref = zeros(nstates,nsteps,ntrajs_testing);
 
-% Design data-driven robust contoller
-K_ROB_DD.designDataDriven(W1, W2, W3, Ts, ncontrolled_states, ninputs);
-K_ROB_DD.validate();
-K_ROB_DD.plotTFs();
+Sim_Robust_Mixsyn = CLSimulator(Model_NL, Controller_Robust_Mixsyn);
+X_Robust_Mixsyn = Sim_Robust_Mixsyn.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
+Sim_Robust_DD = CLSimulator(Model_NL, Controller_Robust_DD);
+X_Robust_DD = Sim_Robust_DD.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 
-%% 
-G_Set = [];
-A_sum = zeros(size(Model_DDFL.A_c));
-B_sum = zeros(size(Model_DDFL.B_c));
-
-nfolds = 5;
-traj_per_fold = floor(ntrajs_training / nfolds);
-
-% Multimodel set
-for i = 1:nfolds
-    Model_ROBUST = EDMDModel("LINEAR", "LS", func_linear, ncontrolled_states, ninputs, ncontrolled_states, Ts, ncross_val_groups);
-    dataset_fold.training.X = data_robust.training.X([1,3], :, traj_per_fold*(i-1)+1 : traj_per_fold*i);
-    dataset_fold.training.U = data_robust.training.U(:, :, traj_per_fold*(i-1)+1 : traj_per_fold*i);
-    Model_ROBUST.EDMDIdentification(dataset_fold);
-
-    A_sum = A_sum + Model_ROBUST.A_CT;
-    B_sum = B_sum + Model_ROBUST.B_CT;
-
-    if isempty(G_Set)
-        G_Set = c2d(ss(Model_ROBUST.A_CT, Model_ROBUST.B_CT, [1, 0], 0),Ts);
-    else
-        G_Set = stack(1, G_Set, c2d(ss(Model_ROBUST.A_CT, Model_ROBUST.B_CT, [1, 0], 0),Ts));
-    end
-end
-
-% Nominal model (mean of models)
-G_nominal = c2d(ss(A_sum / nfolds, B_sum / nfolds, [1, 0], 0),Ts);
-% G_nominal = c2d(ss(Model_DDFL.A_c, Model_DDFL.B_c, [1, 0], 0),Ts);
-
-% Robustness filter W2
-Parray = frd(G_Set,logspace(-1,2.55,60));
-relerr = G_nominal\(G_nominal-G_Set);
-[P,Info] = ucover(Parray,G_nominal,2);
-W2 = Info.W1;
-
-% Performance filter W1
-% W1 = makeweight(2,  6, 0.01, Ts);
-s = tf('s');
-W1 = c2d((s+5)/2/(s+0.000001),Ts);
-
-% Input filter W3
-W3 = c2d(tf(1/100),Ts);
-
-figure;
-bodemag(relerr,'b--',W1, 'r', W2, 'g', {0.1, pi/Ts});
-legend('Relerr','$W1(s)$','$W2(s)$','Interpreter','latex', 'Location', 'southeast');
-title('TFs');
-grid on;
-
-%% ----------------------Mixsyn------------------------------------------%%
-[K_mixsyn,~,gamma] = mixsyn(G_nominal,W1,W3,W2);
-
-% Check if infinity norm if less than 6 dB
-infnorm = norm(1/W1, 'inf')
-infnorm_dB = 20 * log(infnorm)/log(10)
-
-S = feedback(1, G_nominal * K_mixsyn);
-T = feedback(G_nominal * K_mixsyn, 1);
-U = feedback(K_mixsyn, G_nominal);
-
-figure;
-step(T);
-title('Step Response - Output (T) with W3');
-grid on;
-
-figure;
-step(U);
-title('Step Response - Control Signal (U) with W3');
-grid on;
-
-figure;
-bodemag(S,1/W1);
-legend('Sensitivity S(z)','$W1(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of sensitivity TF with W3');
-grid on;
-
-figure;
-bodemag(T,1/W2);
-legend('T(z)','$W2(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of T with W3');
-grid on;
-
-figure;
-bodemag(U,1/W3);
-legend('Input sensitivity U(z)','$W3(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of input sensitivity with W3');
-grid on;
-
-[K_mixsyn_TF_b,K_mixsyn_TF_a] = ss2tf(K_mixsyn.A, K_mixsyn.B, K_mixsyn.C, K_mixsyn.D);
-K_mixsyn_TF_CT = tf(K_mixsyn_TF_b, K_mixsyn_TF_a);
-K_mixsyn_TF_DT = c2d(K_mixsyn_TF_CT, Ts, 'zoh');
-
-%% ---------------------------Data-driven----------------------------------%%
-w = logspace(-2,2.55,50);
-W2_frd = frd(W2,w);
-
-% Initial stabilising controller
-K_init = tf(0.001, 1, Ts);
-
-% Frequency Grid
-omegas = unique([logspace(log10 (0.3) , log10 (W2_frd.Frequency(end)) , 200) , ...
-                 linspace(1, 10, 101), ...
-                 linspace(100, 380, 101)]);
-
-% LFR Models
-G = augw(G_nominal, W1, W3, W2);
-G = mktito(G, 1, ninputs);
-
-% Controller Object 
-K = datadriven.Controller.SS(ncontrolled_states, 1, ninputs, Ts);
-K.setinitial(K_init);
-
-% Synthesiser Object
-synthesiser = Synthesiser(K);
-
-% Add Hinf objectives
-synthesiser.add_Hinf_objective(G, omegas);
-
-% Add H2 objectives
-% synthesiser.add_H2_objective(G, omegas);
-
-% Add Hinf constraints
-% synthesiser.add_Hinf_constraint(G, omegas);
-
-% Add H2 objectives
-% synthesiser.add_H2_constraint(G, omegas);
-
-% Ensure that controller is stable
-synthesiser.ensure_controller_stability(omegas);
-
-% Optimize
-output = synthesiser.synthesise();
-K_DD = output.Controller;
-
-%%
-S = feedback(1, G_nominal * K_DD);
-T = feedback(G_nominal * K_DD, 1);
-U = feedback(K_DD, G_nominal);
-
-figure;
-step(T);
-title('Step Response - Output (T) with W3');
-grid on;
-
-figure;
-step(U);
-title('Step Response - Control Signal (U) with W3');
-grid on;
-
-figure;
-bodemag(S,1/W1);
-legend('Sensitivity S(z)','$W1(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of sensitivity TF with W3');
-grid on;
-
-figure;
-bodemag(T,1/W2);
-legend('T(z)','$W2(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of T with W3');
-grid on;
-
-figure;
-bodemag(U,1/W3);
-legend('Input sensitivity U(z)','$W3(z)^{-1}$','Interpreter','latex', 'Location', 'southeast');
-title('Bode magnitude of input sensitivity with W3');
-grid on;
-
-
-[K_DD_TF_b,K_DD_TF_a] = ss2tf(K_DD.A, K_DD.B, K_DD.C, K_DD.D);
-K_DD_TF_CT = tf(K_DD_TF_b, K_DD_TF_a);
-K_DD_TF_DT = c2d(K_DD_TF_CT, Ts, 'zoh');
-
-
-%%
-
-% DDFL
-Model_DDFL = DDFLModel(func_lifting,nlifted_states,ncontrolled_states,Ts);
-Model_DDFL.DDFLIdentification(Model_BILIN);
-Controller_DDFL = FLController(Model_DDFL);
-K_DDFL = K_DD_TF_DT;
-Sim_DDFL = CLSimulator(Model_NL,Controller_DDFL);
-X_DDFL = Sim_DDFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
-
-
-
+comparison_RobustControl = compare_FL( {X_Robust_DD, X_Robust_Mixsyn}, {'DD', 'Mixsyn'}, Ts, 1000);

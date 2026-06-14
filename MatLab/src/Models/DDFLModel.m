@@ -21,6 +21,7 @@ classdef DDFLModel < handle
         v_h
         v_etta
         v_gamma
+        M
    
     end
 
@@ -46,8 +47,8 @@ classdef DDFLModel < handle
             obj.v_h = zeros(obj.nz, 1);
             obj.v_h(2) = 1;
 
-            M = [obj.v_h'; obj.v_h' * A];
-            obj.T = @(q) M*phi(q);
+            obj.M = [obj.v_h'; obj.v_h' * A];
+            obj.T = @(q) obj.M*phi(q);
             obj.v_gamma = obj.v_h'*(A^(obj.ncontrolled-1))*B;
             obj.gamma = @(q) obj.v_gamma*phi(q);
             obj.v_etta = -obj.v_h'*(A^(obj.ncontrolled));
