@@ -45,17 +45,22 @@ nlifted_states = size(func_lifting(zeros(nstates,1)),1);
 %% --------------DATA COLLECTION----------------------- %%
 Sim_NL = OLSimulator(Model_NL,func_discard);
 
+% Function to generate initial state of trajectories
 func_initialStates = @() [
     0;
     -pi + angle_region * (randi([2,nregions-1]) + rand() - 1);
     5*pi*(2*rand()-1);
     5*pi*(2*rand()-1)
 ];
+
+% To generate random input for data collection
 func_inputs = @() 2*numax*rand(ninputs,nsteps) - numax;
 
-% dataset = Sim_NL.generateDataset(ntrajs_training,ntrajs_testing,nsteps,func_initialStates,func_inputs,'euler');
-% % OR
-[dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data\data.tdms', nstates, ninputs, 0.8, 50, true);
+% For simulation data
+dataset = Sim_NL.generateDataset(ntrajs_training,ntrajs_testing,nsteps,func_initialStates,func_inputs,'euler');
+
+% For real data 
+% [dataset,nsteps,ntrajs_training,ntrajs_testing] = structure_data('data\data.tdms', nstates, ninputs, 0.8, 50, true);
 
 
 %% -------------- EDMD ----------------------- %%
@@ -109,7 +114,7 @@ K_AggressiveLQR = Controller_AggressiveLQR.designLQR([0;0;0;0], 0, diag([10000, 
 Sim_AggressiveLQR = CLSimulator(Model_NL, Controller_AggressiveLQR);
 X_AggressiveLQR = Sim_AggressiveLQR.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 
-comparison_Control = compare_FL( {X_DDFL, X_MBFL, X_AggressiveLQR}, {'DDFL', 'MBFL', 'Aggressive LQR'}, Ts, 1000);
+comparison_Control = compare_FL({X_AggressiveLQR, X_MBFL, X_DDFL}, {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000);
 
 %% -------------- RESULTS OF REAL SYSTEM ----------------- %%
 
@@ -131,28 +136,29 @@ comparison_Tracking = compare_FL( ...
 
 
 %% -------------------- ROBUST CONTROL DESIGN --------------------------%%
-
 % Collect data
+
 % In Simulation
 % ntrajs_testing = 25;
 % nsteps = 500;
 % q_ref = zeros(nstates,nsteps,ntrajs_testing);
-% Controller_DDFL.switch_mode("collect data", 100);
+% Controller_DDFL.switch_mode("collect data", 300);
 % Sim_DDFL = CLSimulator(Model_NL,Controller_DDFL);
 % X_data_robust = Sim_DDFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 % data_robust_sim.training = X_data_robust;
 % Controller_Robust_Mixsyn_Sim = RobustController(Model_DDFL);
 % Controller_Robust_Mixsyn_Sim.buildMultimodelSet(data_robust_sim, 5, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups);
-%
-% % OR real hardware
+
+% On real hardware
 [data_robust, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\14june\data.tdms", nstates, ninputs, 1, 'all', true);
 
 %% Create controllers object
 Controller_Robust_Mixsyn = RobustController(Model_DDFL);
-Controller_Robust_Mixsyn.buildMultimodelSet(data_robust, 5, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups);
+Controller_Robust_Mixsyn.buildMultimodelSet(data_robust, 5, Ts);
 
 Controller_Robust_DD = RobustController(Model_DDFL);
-Controller_Robust_DD.buildMultimodelSet(data_robust, 5, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups);
+Controller_Robust_DD.buildMultimodelSet(data_robust, 5, Ts);
+
 %% Filter design
 
 % Robustness filter W2
@@ -187,7 +193,8 @@ Controller_Robust_DD.designDataDriven(W1, W2, W3, Ts, ncontrolled_states, ninput
 Controller_Robust_DD.validate();
 Controller_Robust_DD.plotTFs();
 
-%%
+%% Simulation
+
 ntrajs_testing = 1;
 nsteps = 500;
 
@@ -196,10 +203,7 @@ q_ref = zeros(nstates,nsteps,ntrajs_testing);
 
 Sim_Robust_Mixsyn = CLSimulator(Model_NL, Controller_Robust_Mixsyn);
 X_Robust_Mixsyn = Sim_Robust_Mixsyn.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
-
-%%
 Sim_Robust_DD = CLSimulator(Model_NL, Controller_Robust_DD);
 X_Robust_DD = Sim_Robust_DD.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 
-%%
 comparison_RobustControl = compare_FL( {X_Robust_DD, X_Robust_Mixsyn}, {'DD', 'Mixsyn'}, Ts, 1000);

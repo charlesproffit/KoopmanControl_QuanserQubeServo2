@@ -114,7 +114,7 @@ K_AggressiveLQR = Controller_AggressiveLQR.designLQR([0;0;0;0], 0, diag([10000, 
 Sim_AggressiveLQR = CLSimulator(Model_NL, Controller_AggressiveLQR);
 X_AggressiveLQR = Sim_AggressiveLQR.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 
-comparison_Control = compare_FL( {X_DDFL, X_MBFL, X_AggressiveLQR}, {'DDFL', 'MBFL', 'Aggressive LQR'}, Ts, 1000);
+comparison_Control = compare_FL({X_AggressiveLQR, X_MBFL, X_DDFL}, {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000);
 
 %% -------------- RESULTS OF REAL SYSTEM ----------------- %%
 
@@ -145,9 +145,7 @@ comparison_Tracking = compare_FL( ...
 % Controller_DDFL.switch_mode("collect data", 300);
 % Sim_DDFL = CLSimulator(Model_NL,Controller_DDFL);
 % X_data_robust = Sim_DDFL.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
-% data_robust_sim.training = X_data_robust;
-% Controller_Robust_Mixsyn_Sim = RobustController(Model_DDFL);
-% Controller_Robust_Mixsyn_Sim.buildMultimodelSet(data_robust_sim, 5, func_linear, ncontrolled_states, ninputs, Ts, ncross_val_groups);
+% data_robust.training = X_data_robust;
 
 % On real hardware
 [data_robust, nsteps,ntrajs_training,ntrajs_testing] = structure_data("data\14june\data.tdms", nstates, ninputs, 1, 'all', true);
