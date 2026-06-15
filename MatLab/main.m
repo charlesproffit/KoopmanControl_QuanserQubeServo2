@@ -114,7 +114,8 @@ K_AggressiveLQR = Controller_AggressiveLQR.designLQR([0;0;0;0], 0, diag([10000, 
 Sim_AggressiveLQR = CLSimulator(Model_NL, Controller_AggressiveLQR);
 X_AggressiveLQR = Sim_AggressiveLQR.generateTrajs(ntrajs_testing,nsteps,func_initialStates,q_ref,'euler');
 
-comparison_Control = compare_FL({X_AggressiveLQR, X_MBFL, X_DDFL}, {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000);
+% For simulation data
+% comparison_Control = compare_FL({X_AggressiveLQR, X_MBFL, X_DDFL}, {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000, diag([10000, 0, 1, 0]), 1);
 
 %% -------------- RESULTS OF REAL SYSTEM ----------------- %%
 
@@ -128,11 +129,11 @@ comparison_Control = compare_FL({X_AggressiveLQR, X_MBFL, X_DDFL}, {'Aggressive 
 
 comparison_Results = compare_FL( ...
     {data_results_lqr.testing, data_results_mbfl.testing, data_results_ddfl.testing}, ...
-    {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000);
+    {'Aggressive LQR', 'MBFL', 'DDFL'}, Ts, 1000, diag([10000, 0, 1, 0]), 1);
 
 comparison_Tracking = compare_FL( ...
     {data_results_mbfl_track.testing, data_results_ddfl_track.testing}, ...
-    {'MBFL Tracking', 'DDFL Tracking'}, Ts, 1000);
+    {'MBFL Tracking', 'DDFL Tracking'}, Ts, 1000, diag([10000, 0, 1, 0]), 1);
 
 
 %% -------------------- ROBUST CONTROL DESIGN --------------------------%%
