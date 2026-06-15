@@ -90,9 +90,10 @@ classdef RobustController < handle
             obj.relerr = obj.G_nominal\(obj.G_nominal-obj.G_Set);
 
             G_nominal_theory = c2d(ss(obj.FLModel.A_c, obj.FLModel.B_c, [1, 0], 0), Ts);
+            relerr_theory = G_nominal_theory\(G_nominal_theory-obj.G_Set);
 
             figure;
-            bodemag(obj.relerr,'b--', {0.1, pi/Ts});
+            bodemag(relerr_theory,'b--', {0.1, pi/Ts});
             legend('Relerr', 'Location', 'southeast');
             title('Models error wrt nominal model');
             grid on;
